@@ -1,0 +1,29 @@
+version: '3.9'
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: cabinos
+      POSTGRES_PASSWORD: cabinos
+      POSTGRES_DB: cabinos
+    ports:
+      - '5432:5432'
+  redis:
+    image: redis:7
+    ports:
+      - '6379:6379'
+  api:
+    image: python:3.11
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+    command: bash -c "pip install -r requirements.txt && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    ports:
+      - '8000:8000'
+    depends_on:
+      - db
+      - redis
+    environment:
+      DATABASE_URL: postgresql://cabinos:cabinos@db:5432/cabinos
+      REDIS_URL: redis://redis:6379
+      MASTER_KEY: supersecret_master_key
