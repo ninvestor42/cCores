@@ -1,19 +1,30 @@
 from fastapi import APIRouter, HTTPException
-from app.crypto import generate_ed25519, encrypt_private_key, did_from_pubkey_hex
+from sqlalchemy.exc import SQLAlchemyError
+
 from app.config import settings
+from app.crypto import did_from_pubkey_hex, encrypt_private_key, generate_ed25519
 from app.database import SessionLocal
 from app.models import Identity
-router=APIRouter()
-@router.post('/create')
-def create_identity():
-    priv,pub=generate_ed25519(); did=did_from_pubkey_hex(pub)
-    enc=encrypt_private_key(settings.MASTER_KEY_BYTES, priv)
-    db=SessionLocal()
+from app.schemas import IdentityCreateResponse
+
+router = APIRouter()
+
+
+@router.post("/create", response_model=IdentityCreateResponse)
+def create_identity() -> IdentityCreateResponse:
+    private_key, public_key = generate_ed25519()
+    did = did_from_pubkey_hex(public_key)
+    encrypted_private_key = encrypt_private_key(settings.MASTER_KEY_BYTES, private_key)
+
+    db = SessionLocal()
     try:
-        row=Identity(did=did, public_key=pub, encrypted_private_key=enc)
-        db.add(row); db.commit(); db.refresh(row)
-        return {'identity_id':row.id,'did':did,'public_key':pub}
-    except Exception as e:
-        db.rollback(); raise HTTPException(400, f'identity_create_failed: {e}')
+        row = Identity(did=did, public_key=public_key, encrypted_private_key=encrypted_private_key)
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        return IdentityCreateResponse(identity_id=row.id, did=row.did, public_key=row.public_key)
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"identity_create_failed: {exc}") from exc
     finally:
         db.close()
